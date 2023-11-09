@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.2/topics/db/models/
 """
 
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Security(models.Model):
@@ -25,7 +26,7 @@ class Security(models.Model):
     name = models.TextField(null=False, blank=False)
 
     # The security’s ticker (e.g. NFLX)
-    ticker = models.TextField(null=False, blank=False)
+    ticker = models.TextField(null=False, blank=False, primary_key=True)
 
     # This field is used to store the last price of a security
     last_price = models.DecimalField(
@@ -34,3 +35,14 @@ class Security(models.Model):
 
     # TODO: Add additional fields here.
     # ex: description, exchange name, etc.
+
+class Watchlist(models.Model):
+    """
+    Represents a list of securities that a user has chose to keep track of.
+    """
+
+    # The user that owns this watchlist
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    # The list of securities that are in the watchlist
+    securities=models.ManyToManyField(Security)

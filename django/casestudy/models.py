@@ -26,15 +26,19 @@ class Security(models.Model):
     name = models.TextField(null=False, blank=False)
 
     # The security’s ticker (e.g. NFLX)
-    ticker = models.TextField(null=False, blank=False, primary_key=True)
+    ticker = models.TextField(null=False, blank=False)
 
     # This field is used to store the last price of a security
     last_price = models.DecimalField(
         null=True, blank=True, decimal_places=2, max_digits=11,
     )
 
-    # TODO: Add additional fields here.
-    # ex: description, exchange name, etc.
+    exchange_name = models.TextField(null=False, blank=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["ticker"])
+        ]
 
 class Watchlist(models.Model):
     """

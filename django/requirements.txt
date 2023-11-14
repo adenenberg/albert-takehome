@@ -5,3 +5,4 @@ psycopg2-binary>=2.8
 redis>=4.0
 requests>=2.31.0
 celery[redis]
+pytz

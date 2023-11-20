@@ -1,45 +1,62 @@
-from datetime import datetime
-from celery import Celery
+from datetime import datetime, timezone
+from celery import Celery, shared_task
+from celery.signals import worker_ready
 from celery.schedules import crontab
-from pytz import timezone
+import pytz
 
 from casestudy.models import Security
-from django.casestudy import securities_client
+from casestudy import securities_client
 
 app = Celery()
-market_open = datetime.timetz(14, 30, 0, 0, pytz.UTC)
-market_close = datetime.timetz(21, 0, 0, 0, pytz.UTC)
+dt = datetime.utcnow()
+market_open = dt.replace(hour=14, minute=30, second=0, microsecond=0)
+market_close = dt.replace(hour=21, minute=0, second=0, microsecond=0)
 
-@app.on_after_configure.connect
-def setup_periodic_tasks(sender, **kwargs):
-    sender.add_periodic_task(5.0, update_security_prices)
+# @app.on_after_configure.connect
+# def setup_periodic_tasks(sender, **kwargs):
+#     sender.add_periodic_task(5.0, update_security_prices)
 
-    sender.add_periodic_task(
-        crontab(second='*/5',
-                hour='2,3,4,5,6,7,8',
-                day_of_week='mon-fri')
-    )
+    # sender.add_periodic_task(
+    #     crontab(minute='30',
+    #             hour='14',
+    #             day_of_week='mon-fri')
+    # )
 
-@periodic_task(run_every=timedelta(seconds=30))
-def update_security_prices():
+@shared_task()
+def update_security_prices(force):
     print('update security prices')
+    now = datetime.utcnow()
+    today = datetime.today()
+    if (0 <= today.weekday() <= 4 and market_open.time() <= now.time() <= market_close.time()) or force:
+        #do the update
+        securities = Security.objects.all()
+        ticker_names = []
+        for sec in securities:
+            ticker_names.append(sec.ticker)
+        prices = securities_client.get_prices(ticker_names)
+        for sec in securities:
+            sec.last_price = prices[sec.ticker]
+        Security.objects.bulk_update(securities, ['last_price'])
 
-@app.task
+
+
+@shared_task()
 def update_available_securities():
     #stuff
     print('update available securities')
     securities_json = securities_client.get_tickers()
     securities = []
-    for key, value in securities_json:
-        securities.append(Security(ticker=key, name=value, exchange_name='NYSE'))
+    for key, value in securities_json.items():
+        securities.append(Security(ticker=key, name=value))
     
+    Security.objects.bulk_create(
+        securities,
+        update_conflicts=True,
+        update_fields=['ticker', 'name'],
+        unique_fields=['ticker'])
 
 @worker_ready.connect
 def at_start(sender, **k):
-    with sender.app.connection() as conn:
-        sender.app.send_task('update available securities')
-        sender.app.send_task('update prices')
-        now = datetime.utcnow()
-        today = datetime.today()
-        if 0 <= today.weekday() <= 4 and market_open <= now <= market_close:
-            #start polling
+    print('running starting task')
+    update_available_securities()
+    update_security_prices(True)
